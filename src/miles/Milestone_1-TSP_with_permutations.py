@@ -66,6 +66,6 @@ def solve_tsp_exact(filename: str):
 # Usage
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python solution.py <C:/Users/kla_user/Desktop/kla/TestCases/Milestone1/Input_Milestone1_Testcase4.json>")
+        print("Usage: python solution.py <input_json_file>")
         sys.exit(1)
     solve_tsp_exact(sys.argv[1])

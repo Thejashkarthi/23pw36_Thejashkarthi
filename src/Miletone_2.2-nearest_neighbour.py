@@ -45,21 +45,19 @@ def trapezoidal_time(distance: float, v_max: float, a_max: float) -> float:
     if distance <= 0:
         return 0.0
     if a_max <= 0 or v_max <= 0:
-        # Impossible to accelerate, or no motion possible
-        # Fallback: assume constant v_max if possible, else infinite time
         return distance / v_max if v_max > 0 else float('inf')
     
     # Correct total ramp distance: accel to v_max + decel from v_max
     ramp_dist = v_max ** 2 / a_max
     
     if distance <= ramp_dist:
-        # Pure triangular profile
+        
         return 2 * math.sqrt(distance / a_max)
     else:
-        # Trapezoidal: cruise at v_max
+        
         cruise_dist = distance - ramp_dist
         cruise_time = cruise_dist / v_max
-        ramp_time = v_max / a_max * 2  # accel + decel
+        ramp_time = v_max / a_max * 2  
         return cruise_time + ramp_time
 
 
@@ -129,6 +127,42 @@ def nearest_neighbor_start(data, start_idx=None):
     
     return path, total_t
 
+#new time computing ----- starts
+
+def compute_time_from_path(data, path_indices: List[int]) -> float:
+    total_t = 0.0
+    prev_pos = tuple(data["start_pos"])
+    prev_angle = data["initial_angle"]
+    
+    for idx in path_indices:
+        next_pos = data["centers"][idx]
+        next_angle = data["target_angles"][idx]
+        
+        distance = math.hypot(next_pos[0] - prev_pos[0], next_pos[1] - prev_pos[1])
+        trans_time = distance / data["v_max"] if data["v_max"] > 0 else float('inf')
+        if data["a_max"] > 0:
+            trans_time = trapezoidal_time(distance, data["v_max"], data["a_max"])
+        
+        delta_angle = (next_angle - prev_angle) % 360
+        delta_angle = min(delta_angle, 360 - delta_angle)
+        if delta_angle%90==0:
+            delta_angle=0    
+        rot_time = delta_angle / data["omega_max"] if data["omega_max"] > 0 else float('inf')
+        if data["alpha_max"] > 0:
+            rot_time = angular_trapezoidal_time(delta_angle, data["omega_max"], data["alpha_max"])
+        
+        segment_t = max(trans_time, rot_time)
+        total_t += segment_t
+        
+        prev_pos = next_pos
+        prev_angle = next_angle
+    
+    return total_t
+
+    
+
+#----- non heuristic
+
 def two_opt_improve(data, init_path: List[int]) -> Tuple[List[int], float]:
     n = len(init_path)
     if n < 2:
@@ -178,7 +212,7 @@ def get_best_path(data):
         path2, time2 = two_opt_improve(data, path2)
     else:
         time2 = float('inf')
-    
+    '''
     # Start3: From 'left' end (min x or y)
     if n > 0:
         left_idx = min(range(n), key=lambda i: centers[i][0] if abs(centers[0][0] - centers[1][0]) > abs(centers[0][1] - centers[1][1]) else centers[i][1])
@@ -193,14 +227,41 @@ def get_best_path(data):
         path4, _ = nearest_neighbor_start(data, right_idx)
         path4, time4 = two_opt_improve(data, path4)
     else:
+        time4 = float('inf') ''' 
+    
+        # Start3 and Start4: From opposite ends based on overall layout (horizontal or vertical)
+    if n > 0:
+        xs = [c[0] for c in centers]
+        ys = [c[1] for c in centers]
+        x_range = max(xs) - min(xs)
+        y_range = max(ys) - min(ys)
+        
+        if x_range >= y_range:
+            # Primarily horizontal layout → start from leftmost and rightmost
+            left_idx = min(range(n), key=lambda i: centers[i][0])
+            right_idx = max(range(n), key=lambda i: centers[i][0])
+        else:
+            # Primarily vertical layout → start from bottommost and topmost
+            left_idx = min(range(n), key=lambda i: centers[i][1])   # using "left" as lower Y
+            right_idx = max(range(n), key=lambda i: centers[i][1])  # using "right" as higher Y
+        
+        # Path starting from "left" end
+        path3, _ = nearest_neighbor_start(data, left_idx)
+        path3, time3 = two_opt_improve(data, path3)
+        
+        # Path starting from "right" end
+        path4, _ = nearest_neighbor_start(data, right_idx)
+        path4, time4 = two_opt_improve(data, path4)
+    else:
+        time3 = float('inf')
         time4 = float('inf')
     
     # Pick best
-    times = [(path1, time1), (path2, time2), (path3, time3), (path4, time4)]
+    times = [(path1, time1), (path2, time2),(path3,time3),(path4, time4)]
     best_path, best_time = min(times, key=lambda x: x[1])
     
     return best_path, best_time
-
+'''
 def solve_and_output(filename: str):
     data = load_json_file(filename)
     
@@ -213,6 +274,31 @@ def solve_and_output(filename: str):
    
     result = {
         "TotalTime": round(total_time, 9),  # Safe: 9 decimals is more than enough
+        "Path": path_coords
+    }
+    
+    print(json.dumps(result, indent=2))
+    
+    output_file = filename.replace("Input_", "Output_").replace(".json", "_solved.json")
+    with open(output_file, 'w') as f:
+        json.dump(result, f, indent=2)
+    
+    print(f"\nSaved to: {output_file}")'''
+
+def solve_and_output(filename: str):
+    data = load_json_file(filename)
+    
+    opt_path_indices, _ = get_best_path(data)  # ignore the time from heuristic
+    
+    # Re-compute exact time from the path
+    total_time = compute_time_from_path(data, opt_path_indices)
+    
+    path_coords = [list(data["start_pos"])]
+    for idx in opt_path_indices:
+        path_coords.append([data["centers"][idx][0], data["centers"][idx][1]])
+    
+    result = {
+        "TotalTime": round(total_time, 9),
         "Path": path_coords
     }
     
