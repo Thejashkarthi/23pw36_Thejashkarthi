@@ -163,7 +163,7 @@ def two_opt_improve(data, init_path: List[int]) -> Tuple[List[int], float]:
     while improved:
         improved = False
         for i in range(1, n-1):
-            for j in range(i+2, n+1):
+            for j in range(i+2, n):
                 new_path = best_path[:i] + best_path[i:j][::-1] + best_path[j:]
                 new_time = path_time(new_path)
                 if new_time < best_time - 1e-8:
@@ -178,39 +178,63 @@ def get_best_path(data):
     start = data["start_pos"]
     n = len(centers)
     
-    # Start1: Standard NN from closest
-    path1, _ = nearest_neighbor_start(data)
-    path1, time1 = two_opt_improve(data, path1)
+    candidates = []
     
-    # Start2: From farthest die
-    if n > 0:
-        farthest_idx = max(range(n), key=lambda i: math.hypot(centers[i][0]-start[0], centers[i][1]-start[1]))
-        path2, _ = nearest_neighbor_start(data, farthest_idx)
-        path2, time2 = two_opt_improve(data, path2)
-    else:
-        time2 = float('inf')
-    '''
-    # Start3: From 'left' end (min x or y)
-    if n > 0:
-        left_idx = min(range(n), key=lambda i: centers[i][0] if abs(centers[0][0] - centers[1][0]) > abs(centers[0][1] - centers[1][1]) else centers[i][1])
-        path3, _ = nearest_neighbor_start(data, left_idx)
-        path3, time3 = two_opt_improve(data, path3)
-    else:
-        time3 = float('inf')
+    # 1. Standard nearest neighbor (implicitly starts from closest)
+    path, _ = nearest_neighbor_start(data)
+    path, time = two_opt_improve(data, path)
+    candidates.append((path, time))
     
-    # Start4: From 'right' end (max x or y)
-    if n > 0:
-        right_idx = max(range(n), key=lambda i: centers[i][0] if abs(centers[0][0] - centers[1][0]) > abs(centers[0][1] - centers[1][1]) else centers[i][1])
-        path4, _ = nearest_neighbor_start(data, right_idx)
-        path4, time4 = two_opt_improve(data, path4)
+    if n == 0:
+        best_path, best_time = [], 0.0
     else:
-        time4 = float('inf') ''' 
-    
-    # Pick best
-    times = [(path1, time1), (path2, time2)]
-    best_path, best_time = min(times, key=lambda x: x[1])
+        # 2. Start from farthest die
+        farthest_idx = max(range(n), key=lambda i: math.hypot(centers[i][0] - start[0], centers[i][1] - start[1]))
+        path, _ = nearest_neighbor_start(data, farthest_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # 3. Start from leftmost (min X)
+        min_x_idx = min(range(n), key=lambda i: centers[i][0])
+        path, _ = nearest_neighbor_start(data, min_x_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # 4. Start from rightmost (max X)
+        max_x_idx = max(range(n), key=lambda i: centers[i][0])
+        path, _ = nearest_neighbor_start(data, max_x_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # 5. Start from bottom (min Y)
+        min_y_idx = min(range(n), key=lambda i: centers[i][1])
+        path, _ = nearest_neighbor_start(data, min_y_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # 6. Start from top (max Y)
+        max_y_idx = max(range(n), key=lambda i: centers[i][1])
+        path, _ = nearest_neighbor_start(data, max_y_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # 7. Explicitly start from closest (sometimes useful)
+        closest_idx = min(range(n), key=lambda i: math.hypot(centers[i][0] - start[0], centers[i][1] - start[1]))
+        path, _ = nearest_neighbor_start(data, closest_idx)
+        path, time = two_opt_improve(data, path)
+        candidates.append((path, time))
+        
+        # Select the best among all
+        best_path, best_time = min(candidates, key=lambda x: x[1])
     
     return best_path, best_time
+    
+    '''# Pick best
+    times = [(path1, time1), (path2, time2), (path3,time3) ,(path4,time4)]
+    print(f"path1 :{time1}, path:{time2} ,path:{time3} , path:{time4}")
+    best_path, best_time = min(times, key=lambda x: x[1])
+    
+    return best_path, best_time'''
 
 def solve_and_output(filename: str):
     data = load_json_file(filename)
